@@ -1,0 +1,237 @@
+<!doctype html>
+<html>
+<head>
+	<title></title>
+	<meta charset="utf-8">
+    <script src="intersect.js"></script>
+	<script src="jquery-1.11.2.min.js"></script>
+	<script>
+/* --- DEFINE AIRPORT CLASS --- */
+var Place = function( id, options ) {
+	this.name = options.name || 'no name';
+	this.radius = options.radius || 5;
+	if ( !options.x )
+ 		this.setRandomLoc();
+	this.appendPlace(id);
+}
+Place.prototype = {
+		setRandomLoc: function() {
+			this.x = Math.floor( Math.random() * 481 ) + 10;
+			this.y = Math.floor( Math.random() * 281 ) + 10;
+		},
+		appendPlace: function( id )	{
+			// add city to #world
+			$( '#'+id  ).append(
+				$( '<span>' ).html( '<br>'+this.name ).css({
+					top:this.y-this.radius-1,
+					left:this.x-this.radius-1,
+					width:this.radius*2,
+					height:this.radius*2
+				})
+		  );
+		}
+}
+/* --- END AIRPORT CLASS --- */
+
+/* --- DEFINE AIRPLANE CLASS --- */
+var Plane = function( id, options ) {
+	var nm = 1.852216;
+	this.radius = options.radius || 5;
+	this.radius *= nm;
+	this.v = options.v || 500;
+	this.vX = 0;
+	this.vY = 0;
+	this.x = 0;
+	this.y = 0;
+	this.newPlane = 0; // no hit the first 2 sec
+	this.landed = false;
+	this.setRandomStart( options.cities );
+	this.appendPlane( id );
+}
+Plane.gameOver = function() {
+	alert( 'GAME OVER' );
+	top.location.reload();
+}
+Plane.prototype = {
+		frameMS: 40,
+		setRandomStart: function( cities ) {
+			this.start = cities[Math.floor( Math.random() * cities.length )];
+			this.x = this.start.x;
+			this.y = this.start.y;
+			this.setRandomTarget( cities );
+		},
+		setRandomTarget: function( cities ) {
+			do {
+				this.target = {
+					city: cities[Math.floor( Math.random() * cities.length )],
+				}
+				this.target.x = this.target.city.x;
+				this.target.y = this.target.city.y;
+			} while( this.target.city == this.start );
+			this.setDirectionFlight();
+		},
+		setDirectionFlight: function() {
+			var vector = Math.sqrt( Math.pow(this.target.x - this.x,2) + Math.pow(this.target.y - this.y,2)  );
+			this.vX = (this.target.x - this.x)/(vector/this.v * 60 * 1000 / this.frameMS );
+			this.vY = (this.target.y - this.y)/(vector/this.v * 60 * 1000 / this.frameMS);
+		},
+		appendPlane: function( id )	{
+			var _t = this;
+			_t.htmlSpan = $( '<i>' ).css({
+					top:_t.y-_t.radius,
+					left:_t.x-_t.radius,
+					width:_t.radius*2,
+					height:_t.radius*2,
+					background:'rgba(150,150,150,0.5)'
+				}).on( 'click', function(e) {
+					e.stopPropagation();
+					_t.selectPlane();
+				})
+			$( '#'+id  ).append( _t.htmlSpan );
+			_t.flight();
+		},
+		redrawPlane: function() {
+			this.htmlSpan.css({
+				top:this.y-this.radius,
+				left:this.x-this.radius
+			})
+		},
+		selectPlane: function() {
+				$( '#target' ).html( 'Ziel: ' + this.target.city.name );
+				$( '.highlight' ).removeClass( 'highlight' );
+				this.htmlSpan.addClass( 'highlight' );
+		},
+		flight:function() {
+			var _t = this;
+			_t.x += _t.vX;
+			_t.y += _t.vY;
+			_t.newPlane++;
+
+			if ( _t.newPlane * _t.frameMS > 2000 ) _t.htmlSpan.css({background:'rgba(0,255,0,0.5)'});
+
+			_t.redrawPlane();
+			if ( _t.x < 0 || _t.x > 500 || _t.y < 0 || _t.y > 300 ) _t.gameOver();
+
+			if ( _t.checkCollision( _t.target.city.x, _t.target.city.y, 0, _t.target.city.radius )	) {
+				//console.log( _t.target.city.x, _t.target.city.y, 0, _t.target.city.radius );
+				_t.htmlSpan.css({background:'rgba(255,255,0,0.5)'});
+				_t.landed = true;
+				//_t.htmlSpan.remove();
+			} else {
+				setTimeout( function() { _t.flight.call(_t) }, _t.frameMS );
+			}
+		},
+		gameOver:Plane.gameOver,
+		checkCollision: function( x, y, r1, r2 ) {
+			return (
+				(this.x+r1 >= x - r2 &&	this.x-r1 <= x + r2 ) &&
+				(this.y+r1 >= y - r2 && this.y-r1 <= y + r2 )
+			);
+		}
+}
+/* --- END AIRPORT CLASS --- */
+
+
+$(document).ready( function() {
+	var cities = ['Paris','London','Frankfurt','Madrid','Wien']
+  cities.forEach( function(v,i) {
+		cities[i] = new Place( 'world', {name:v} );
+	})
+
+	/*
+	console.log( cities );
+	var save = JSON.stringify(cities);
+	var loaded = JSON.parse( save );
+	var cities = [];
+	loaded.forEach( function(v,i) {
+		//console.log( v, loaded[i] );
+		cities[i] = new Place( 'world', loaded[i] )
+
+	})
+	return;
+	*/
+	//localStorage.setItem( 'orte', JSON.stringify(cities) );
+
+	var planes = [];
+	planes.push( new Plane( 'world', { cities:cities, v:500 } ) );
+	setInterval( function() {
+		planes.push( new Plane( 'world', { cities:cities, v:500 } ) );
+	},5000);
+
+	$( '#world, #world span' ).on('click', function(ev) {
+		if ( $( '#world .highlight' ).length == 0 ) return false; // plane selected
+		ev.stopPropagation();
+		var targetX = ev.offsetX;
+		var targetY = ev.offsetY;
+		if ( ev.currentTarget.tagName.toLowerCase() == 'span' ) { // click on city
+			targetX = parseInt( $(this).css('left') ) + parseInt( $(this).css('width') )/2 + 1;
+			targetY = parseInt( $(this).css('top') ) + parseInt( $(this).css('height') )/2 + 1;
+		}
+		planes.forEach( function(e,i) {
+			if ( planes[i].htmlSpan.hasClass( 'highlight') ) {
+				planes[i].target.x = targetX;
+				planes[i].target.y = targetY;
+				planes[i].setDirectionFlight();
+			};
+		});
+		//$('.highlight').removeClass( 'highlight')
+	});
+
+
+	// check airplane collision
+	setInterval( function() {
+		planes.forEach( function(e1,i1) {
+
+
+			//if ( planes[i1].newPlane * planes[i1].frameMS > 2000 )
+			planes.forEach( function(e2,i2) {
+
+				if ( i1 < i2 && !planes[i1].landed && !planes[i2].landed ) {
+					var Q = Intersect2Circles(
+						[planes[i1].x, planes[i1].y],
+						planes[i1].radius,
+						[planes[i2].x, planes[i2].y],
+						planes[i2].radius
+					);
+					if ( Q.length > 0 )  Plane.gameOver();
+				}
+			})
+		})
+	}, 200 );
+});
+
+
+
+	</script>
+	<style>
+* { margin:0; padding:0; }
+body { font-family:Arial; background:#555; }
+html,body { height:100%; }
+#world { background:white; width:500px; height:300px;
+		position:absolute;
+		top:calc(50% - 150px);
+		left:calc(50% - 250px); }
+h1 { text-align:center; font-size:3em; width:100%; position:absolute; top:calc(50% - 230px); }
+#target { text-align:center; font-size:1em; width:100%; position:absolute; top:calc(50% + 160px); }
+hr {width:100%; border:none; background:#00b300; height:1px; position:absolute; z-index:1000; left:0; top:100px;
+	 animation-name:radar;
+	 animation-duration: 3s;
+  animation-iteration-count: infinite; }
+/*@keyframes radar {
+	0% { top:0; }
+	50% { top:100%; }
+	100% { top:0; }
+}*/
+#world span { position:absolute; text-align:center; font-size:9px; border:1px solid #000; background:rgba(255,0,0,0.2); border-radius:50%; }
+#world i { position:absolute; background:rgba(0,255,0,0.5); border-radius:50%; }
+#world i.highlight {  background:red !important; }
+	</style>
+</head>
+<body>
+<h1>Flugradar</h1>
+<div id="world"></div>
+<div id="target"></div>
+<hr>
+
+</body>
+</html>
